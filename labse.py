@@ -1,125 +1,154 @@
-"""
-Paragraph Alignment using LaBSE + Hungarian Algorithm
-
-Reads:
-    data/eng.txt
-    data/mal.txt
-
-Outputs:
-    output/aligned_paragraphs.csv
-"""
-
 import os
 import numpy as np
-import pandas as pd
-from scipy.optimize import linear_sum_assignment
 from sentence_transformers import SentenceTransformer
-from sentence_transformers.util import cos_sim
-import torch
+from sklearn.metrics.pairwise import cosine_similarity
+import csv
+import re
 
 
-# ==============================
-# CONFIGURATION
-# ==============================
+class LaBSEMatcher:
+    def __init__(self, similarity_threshold=0.7):
+       
+        print("Loading LaBSE model...")
+        self.model = SentenceTransformer('sentence-transformers/LaBSE')
+        self.similarity_threshold = similarity_threshold
+        print("Model loaded successfully!")
+    
+    def read_text_file(self, filepath):
+        """Read text file and return content"""
+        with open(filepath, 'r', encoding='utf-8-sig') as f:
+            return f.read()
+    
+   
+    def split_into_paragraphs(self, text):
+        """
+        Reconstruct paragraphs for Malayalam PDF text
+        Splits when strong sentence endings appear.
+        """
 
-MODEL_NAME = "sentence-transformers/LaBSE"
-SIMILARITY_THRESHOLD = 0.75
+        lines = text.splitlines()
+        paragraphs = []
+        current_para = ""
 
-ENG_FILE_PATH = "eng.txt"
-MAL_FILE_PATH = "mal.txt"
-OUTPUT_CSV_PATH = "output/aligned_paragraphs.csv"
+        for line in lines:
+            line = line.strip()
+
+            if not line:
+                continue  # skip empty lines
+
+            if current_para:
+                current_para += " " + line
+            else:
+                current_para = line
+
+            # If line ends with strong punctuation → treat as paragraph end
+            if line.endswith(('.', '?', '!', '”', '"')):
+                paragraphs.append(current_para.strip())
+                current_para = ""
+
+        # Add remaining text
+        if current_para:
+            paragraphs.append(current_para.strip())
+
+        return paragraphs
+        
+    def get_embeddings(self, paragraphs):
+        """Generate LaBSE embeddings for list of paragraphs"""
+        print(f"Generating embeddings for {len(paragraphs)} paragraphs...")
+        embeddings = self.model.encode(paragraphs, convert_to_numpy=True)
+        return embeddings
+    
+    def find_similar_paragraphs(self, en_paragraphs, ml_paragraphs):
+
+        print("Computing embeddings for English paragraphs...")
+        en_embeddings = self.get_embeddings(en_paragraphs)
+        
+        print("Computing embeddings for Malayalam paragraphs...")
+        ml_embeddings = self.get_embeddings(ml_paragraphs)
+        
+        print("Computing similarity matrix...")
+        similarity_matrix = cosine_similarity(en_embeddings, ml_embeddings)
+        
+        matched_pairs = []
+        used_ml_indices = set()
+        
+        # For each English paragraph, find the best matching Malayalam paragraph
+        for en_idx in range(len(en_paragraphs)):
+            # Find the best match for this English paragraph
+            ml_idx = np.argmax(similarity_matrix[en_idx])
+            max_similarity = similarity_matrix[en_idx][ml_idx]
+            
+            # Check if similarity exceeds threshold and ML paragraph hasn't been used
+            if max_similarity >= self.similarity_threshold and ml_idx not in used_ml_indices:
+                matched_pairs.append({
+                    'en_text': en_paragraphs[en_idx],
+                    'ml_text': ml_paragraphs[ml_idx],
+                    'similarity': float(max_similarity),
+                    'en_index': en_idx,
+                    'ml_index': ml_idx
+                })
+                used_ml_indices.add(ml_idx)
+        
+        print(f"Found {len(matched_pairs)} matching paragraph pairs!")
+        return matched_pairs
 
 
-# ==============================
-# UTILITY FUNCTIONS
-# ==============================
+def save_to_csv(matched_pairs, output_file='dataset.csv'):
+    """Append matched pairs to dataset.csv"""
 
-def read_text_file(file_path):
-    with open(file_path, "r", encoding="utf-8") as f:
-        return f.read()
+    file_exists = os.path.isfile(output_file)
 
+    with open(output_file, 'a', encoding='utf-8-sig', newline='') as f:
+        writer = csv.writer(f)
 
-def split_into_paragraphs(text):
-    paragraphs = [p.strip() for p in text.split("\n\n") if p.strip()]
-    return paragraphs
+        # Write header only if file doesn't exist
+        if not file_exists:
+            writer.writerow(['English Text (en_xx)', 'Malayalam Text (ml_xx)'])
 
+        # Append rows
+        for pair in matched_pairs:
+            writer.writerow([
+                f"en_xx: {pair['en_text']}",
+                f"ml_xx: {pair['ml_text']}",
+            ])
 
-# ==============================
-# MAIN PIPELINE
-# ==============================
+    print(f"Appended {len(matched_pairs)} matches to {output_file}")
 
 def main():
-
-    print("Step 1: Reading files...")
-    eng_text = read_text_file(ENG_FILE_PATH)
-    mal_text = read_text_file(MAL_FILE_PATH)
-
-    eng_paragraphs = split_into_paragraphs(eng_text)
-    mal_paragraphs = split_into_paragraphs(mal_text)
-
-    print("English paragraphs:", len(eng_paragraphs))
-    print("Malayalam paragraphs:", len(mal_paragraphs))
-
-    if len(eng_paragraphs) == 0 or len(mal_paragraphs) == 0:
-        raise ValueError("One of the files has no paragraphs.")
-
-    print("Step 2: Loading LaBSE model...")
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model = SentenceTransformer(MODEL_NAME, device=device)
-
-    print("Using device:", device)
-
-    print("Step 3: Generating embeddings...")
-    eng_embeddings = model.encode(
-        eng_paragraphs,
-        convert_to_tensor=True,
-        show_progress_bar=True
-    )
-
-    mal_embeddings = model.encode(
-        mal_paragraphs,
-        convert_to_tensor=True,
-        show_progress_bar=True
-    )
-
-    print("Step 4: Computing similarity matrix...")
-    sim_matrix = cos_sim(eng_embeddings, mal_embeddings)
-    sim_np = sim_matrix.cpu().numpy()
-
-    print("Similarity matrix shape:", sim_np.shape)
-
-    print("Step 5: Running Hungarian Algorithm...")
-
-    cost_matrix = -sim_np
-    row_ind, col_ind = linear_sum_assignment(cost_matrix)
-
-    print("Total assignments:", len(row_ind))
-
-    print("Step 6: Applying similarity threshold...")
-
-    aligned_pairs = []
-
-    for r, c in zip(row_ind, col_ind):
-        score = sim_np[r][c]
-
-        if score >= SIMILARITY_THRESHOLD:
-            aligned_pairs.append({
-                "English": "<en_xx> " + eng_paragraphs[r],
-                "Malayalam": "<ml_xx> " + mal_paragraphs[c],
-                "Similarity": float(score)
-            })
-
-    print("Final aligned pairs after threshold:", len(aligned_pairs))
-
-    print("Step 7: Writing results to CSV...")
-
-    os.makedirs(os.path.dirname(OUTPUT_CSV_PATH), exist_ok=True)
-
-    df = pd.DataFrame(aligned_pairs)
-    df.to_csv(OUTPUT_CSV_PATH, index=False, encoding="utf-8-sig")
-
-    print("Alignment complete.")
-    print("CSV saved at:", OUTPUT_CSV_PATH)
+    """Main execution function"""
+    
+    # Configuration
+    EN_TEXT_FILE = 'eng.txt'  # Path to English text file
+    ML_TEXT_FILE = 'mal.txt'  # Path to Malayalam text file
+    OUTPUT_CSV = 'matched_paragraphs.csv'  # Output CSV file
+    SIMILARITY_THRESHOLD = 0.7  # Adjust based on your needs (0.0 to 1.0)
+    
+    # Step 1: Initialize LaBSE matcher
+    matcher = LaBSEMatcher(similarity_threshold=SIMILARITY_THRESHOLD)
+    
+    # Step 2: Read text files
+    print("\nReading text files...")
+    en_text = matcher.read_text_file(EN_TEXT_FILE)
+    ml_text = matcher.read_text_file(ML_TEXT_FILE)
+    
+    # Step 3: Split into paragraphs
+    print("\nSplitting texts into paragraphs...")
+    en_paragraphs = matcher.split_into_paragraphs(en_text)
+    ml_paragraphs = matcher.split_into_paragraphs(ml_text)
+    print(f"English: {len(en_paragraphs)} paragraphs")
+    print(f"Malayalam: {len(ml_paragraphs)} paragraphs")
+    
+    # Step 4: Find similar paragraphs
+    print("\nFinding similar paragraphs...")
+    matched_pairs = matcher.find_similar_paragraphs(en_paragraphs, ml_paragraphs)
+    
+    # Step 5: Save to CSV
+    print("\nSaving to CSV...")
+    save_to_csv(matched_pairs, OUTPUT_CSV)
+    
+    print("\nProcess completed successfully!")
+    print(f"Total matches found: {len(matched_pairs)}")
+    print(f"Check output file: {OUTPUT_CSV}")
 
 
 if __name__ == "__main__":

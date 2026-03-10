@@ -3,8 +3,8 @@ FULL AUTOMATED PIPELINE
 
 Malayalam scanned PDF → OCR → mal.txt
 English digital PDF → extraction → eng.txt
-mBART-50 → semantic translation → eng_translated.txt
 LaBSE → paragraph alignment → aligned_paragraphs.csv
+mBART-50 → semantic translation of aligned English → translated_aligned.csv
 
 Uses your original extraction methods with automation and semantic translation
 """
@@ -17,7 +17,7 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 import torch
-from translate import MBARTTranslator
+from mbart_pipeline import process_aligned_csv
 
 # try to load local configuration (ignored by git)
 try:
@@ -40,7 +40,6 @@ ENG_PDF = getattr(cfg, "ENG_PDF", "novel.pdf")
 # Use workspace-relative text files (existing under 3_paras/)
 MAL_TXT = getattr(cfg, "MAL_TXT", os.path.join("3_paras", "3_para_mal.txt"))
 ENG_TXT = getattr(cfg, "ENG_TXT", os.path.join("3_paras", "3_para_eng.txt"))
-ENG_TRANSLATED_TXT = getattr(cfg, "ENG_TRANSLATED_TXT", "eng_translated.txt")
 
 OUTPUT_CSV = "aligned_paragraphs.csv"
 
@@ -212,30 +211,6 @@ def align_paragraphs():
 
 
 # ==============================
-# SEMANTIC TRANSLATION
-# ==============================
-
-def translate_english_to_malayalam():
-
-    print("\n=== mBART-50 Semantic Translation ===")
-
-    if not os.path.exists(ENG_TXT):
-        print(f"English text file {ENG_TXT} not found. Skipping translation.")
-        return
-
-    translator = MBARTTranslator()
-
-    translator.translate_file(
-        input_path=ENG_TXT,
-        output_path=ENG_TRANSLATED_TXT,
-        src_lang="en_XX",
-        tgt_lang="ml_IN"
-    )
-
-    print("Semantic translation completed.")
-
-
-# ==============================
 # MAIN
 # ==============================
 
@@ -264,7 +239,7 @@ def main():
     # Only run alignment if both text files are present
     if os.path.exists(MAL_TXT) and os.path.exists(ENG_TXT):
         align_paragraphs()
-        translate_english_to_malayalam()
+        process_aligned_csv()
     else:
         print("Alignment and translation skipped because input text files are missing.")
 
