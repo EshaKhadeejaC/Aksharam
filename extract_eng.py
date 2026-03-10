@@ -1,7 +1,13 @@
 import fitz
 
-pdf_path = "novel.pdf"
-output_txt = "english_full.txt"
+# load local config if available
+try:
+    import config_local as cfg
+except ImportError:
+    cfg = None
+
+pdf_path = getattr(cfg, "ENG_PDF", "novel.pdf") if cfg else "novel.pdf"
+output_txt = getattr(cfg, "ENG_TXT", "english_full.txt") if cfg else "english_full.txt"
 
 doc = fitz.open(pdf_path)
 

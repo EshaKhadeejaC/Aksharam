@@ -3,9 +3,10 @@ FULL AUTOMATED PIPELINE
 
 Malayalam scanned PDF → OCR → mal.txt
 English digital PDF → extraction → eng.txt
+mBART-50 → semantic translation → eng_translated.txt
 LaBSE → paragraph alignment → aligned_paragraphs.csv
 
-Uses your original extraction methods with automation
+Uses your original extraction methods with automation and semantic translation
 """
 
 import os
@@ -16,20 +17,30 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim
 import torch
+from translate import MBARTTranslator
+
+# try to load local configuration (ignored by git)
+try:
+    import config_local as cfg
+except ImportError:
+    cfg = None
 
 
 # ==============================
 # CONFIGURATION
 # ==============================
 
-TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-POPPLER_PATH = r"C:\Users\Acer\Downloads\Release-25.12.0-0\poppler\Library\bin"
+# default values; may be overridden by config_local
+TESSERACT_PATH = getattr(cfg, "TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+POPPLER_PATH   = getattr(cfg, "POPPLER_PATH", r"C:\Users\Acer\Downloads\Release-25.12.0-0\poppler\Library\bin")
 
-MAL_PDF = "malayalam_novel.pdf"
-ENG_PDF = "novel.pdf"
+MAL_PDF = getattr(cfg, "MAL_PDF", "malayalam_novel.pdf")
+ENG_PDF = getattr(cfg, "ENG_PDF", "novel.pdf")
 
-MAL_TXT = "mal.txt"
-ENG_TXT = "eng.txt"
+# Use workspace-relative text files (existing under 3_paras/)
+MAL_TXT = getattr(cfg, "MAL_TXT", os.path.join("3_paras", "3_para_mal.txt"))
+ENG_TXT = getattr(cfg, "ENG_TXT", os.path.join("3_paras", "3_para_eng.txt"))
+ENG_TRANSLATED_TXT = getattr(cfg, "ENG_TRANSLATED_TXT", "eng_translated.txt")
 
 OUTPUT_CSV = "aligned_paragraphs.csv"
 
@@ -201,16 +212,61 @@ def align_paragraphs():
 
 
 # ==============================
+# SEMANTIC TRANSLATION
+# ==============================
+
+def translate_english_to_malayalam():
+
+    print("\n=== mBART-50 Semantic Translation ===")
+
+    if not os.path.exists(ENG_TXT):
+        print(f"English text file {ENG_TXT} not found. Skipping translation.")
+        return
+
+    translator = MBARTTranslator()
+
+    translator.translate_file(
+        input_path=ENG_TXT,
+        output_path=ENG_TRANSLATED_TXT,
+        src_lang="en_XX",
+        tgt_lang="ml_IN"
+    )
+
+    print("Semantic translation completed.")
+
+
+# ==============================
 # MAIN
 # ==============================
 
 def main():
 
-    extract_malayalam()
+    # If text files already exist, skip extraction. Otherwise attempt extraction
+    mal_exists = os.path.exists(MAL_TXT)
+    eng_exists = os.path.exists(ENG_TXT)
 
-    extract_english()
+    if mal_exists:
+        print(f"Found {MAL_TXT}, skipping Malayalam extraction.")
+    else:
+        if os.path.exists(MAL_PDF):
+            extract_malayalam()
+        else:
+            print(f"Missing both Malayalam text ({MAL_TXT}) and PDF ({MAL_PDF}). Skipping Malayalam extraction.")
 
-    align_paragraphs()
+    if eng_exists:
+        print(f"Found {ENG_TXT}, skipping English extraction.")
+    else:
+        if os.path.exists(ENG_PDF):
+            extract_english()
+        else:
+            print(f"Missing both English text ({ENG_TXT}) and PDF ({ENG_PDF}). Skipping English extraction.")
+
+    # Only run alignment if both text files are present
+    if os.path.exists(MAL_TXT) and os.path.exists(ENG_TXT):
+        align_paragraphs()
+        translate_english_to_malayalam()
+    else:
+        print("Alignment and translation skipped because input text files are missing.")
 
 
 if __name__ == "__main__":

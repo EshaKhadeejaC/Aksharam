@@ -1,0 +1,6 @@
+# Local configuration file for paths (not pushed to Git)
+config_local.py
+
+# Python environment directories
+.venv/
+__pycache__/

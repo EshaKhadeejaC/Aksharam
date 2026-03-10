@@ -7,6 +7,16 @@ from pdf2image import convert_from_path
 from PIL import Image
 import os
 
+# load local configuration if available
+try:
+    import config_local as cfg
+except ImportError:
+    cfg = None
+
+# defaults (may be overridden by cfg)
+TESSERACT_DEFAULT = getattr(cfg, "TESSERACT_PATH", r"C:\Program Files\Tesseract-OCR\tesseract.exe")
+POPPLER_DEFAULT   = getattr(cfg, "POPPLER_PATH", r"C:\Users\Acer\Downloads\Release-25.12.0-0\poppler\Library\bin")
+
 
 class MalayalamOCR:
 
@@ -33,7 +43,7 @@ class MalayalamOCR:
         images = convert_from_path(
             pdf_path,
             dpi=dpi,
-            poppler_path=r"C:\Users\Acer\Downloads\Release-25.12.0-0\poppler\Library\bin"
+            poppler_path=POPPLER_DEFAULT
         )
 
         print(f"✓ Converted {len(images)} pages to images")
@@ -70,10 +80,11 @@ class MalayalamOCR:
 # --------------------------------------------------
 def main():
 
-    PDF_PATH = "malayalam_novel.pdf"
-    OUTPUT_FILE = "malayalam_novel.txt"
+    PDF_PATH = getattr(cfg, "MAL_PDF", "malayalam_novel.pdf") if cfg else "malayalam_novel.pdf"
+    OUTPUT_FILE = getattr(cfg, "MAL_TXT", "malayalam_novel.txt") if cfg else "malayalam_novel.txt"
 
-    TESSERACT_PATH = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    # use default or passed value
+    TESSERACT_PATH = getattr(cfg, "TESSERACT_PATH", TESSERACT_DEFAULT) if cfg else TESSERACT_DEFAULT
 
     ocr = MalayalamOCR(tesseract_path=TESSERACT_PATH)
 
