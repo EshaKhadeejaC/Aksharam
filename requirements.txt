@@ -1,0 +1,33 @@
+# Aksharam Project Requirements
+# Install with: pip install -r requirements.txt
+
+# Core ML libraries
+torch>=2.0.0
+torchvision>=0.15.0
+torchaudio>=2.0.0
+sentence-transformers>=2.2.0
+transformers>=4.21.0
+accelerate>=0.20.0
+
+# Data processing
+pandas>=1.5.0
+numpy>=1.21.0
+scikit-learn>=1.0.0
+
+# PDF and OCR processing
+PyMuPDF>=1.20.0  # fitz
+pdf2image>=1.16.0
+pytesseract>=0.3.10
+Pillow>=9.0.0
+
+# System monitoring
+psutil>=5.9.0
+GPUtil>=1.4.0
+
+# System utilities
+tqdm>=4.64.0
+
+# Optional: For CUDA support (uncomment if you have CUDA installed)
+# torch>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# torchvision>=0.15.0+cu118 --index-url https://download.pytorch.org/whl/cu118
+# torchaudio>=2.0.0+cu118 --index-url https://download.pytorch.org/whl/cu118

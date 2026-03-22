@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import torch
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import csv
@@ -8,9 +9,12 @@ import re
 
 class LaBSEMatcher:
     def __init__(self, similarity_threshold=0.7):
-       
         print("Loading LaBSE model...")
-        self.model = SentenceTransformer('sentence-transformers/LaBSE')
+        # Check for CUDA availability and set device
+        self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        print(f"Using device: {self.device}")
+
+        self.model = SentenceTransformer('sentence-transformers/LaBSE', device=self.device)
         self.similarity_threshold = similarity_threshold
         print("Model loaded successfully!")
     
