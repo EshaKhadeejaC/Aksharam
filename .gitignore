@@ -3,4 +3,5 @@ config_local.py
 
 # Python environment directories
 .venv/
+Frontend-Aksharam/venv/
 __pycache__/
